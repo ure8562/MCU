@@ -30,10 +30,20 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "diag/Trace.h"
-#include "stm32F4xx.h"
+
+#include "Timer.h"
+#include "BlinkLed.h"
+
 // ----------------------------------------------------------------------------
 //
-// Standalone STM32F4 empty sample (trace via ITM).
+// Standalone STM32F4 led blink sample (trace via ITM).
+//
+// In debug configurations, demonstrate how to print a greeting message
+// on the trace device. In release configurations the message is
+// simply discarded.
+//
+// Then demonstrates how to blink a led with 1 Hz, using a
+// continuous loop and SysTick delays.
 //
 // Trace support is enabled by adding the TRACE macro definition.
 // By default the trace messages are forwarded to the ITM output,
@@ -41,6 +51,12 @@
 // changing the definitions required in system/src/diag/trace_impl.c
 // (currently OS_USE_TRACE_ITM, OS_USE_TRACE_SEMIHOSTING_DEBUG/_STDOUT).
 //
+
+// ----- Timing definitions -------------------------------------------------
+
+// Keep the LED on for 2/3 of a second.
+#define BLINK_ON_TICKS  (TIMER_FREQUENCY_HZ * 3 / 4)
+#define BLINK_OFF_TICKS (TIMER_FREQUENCY_HZ - BLINK_ON_TICKS)
 
 // ----- main() ---------------------------------------------------------------
 
@@ -51,21 +67,36 @@
 #pragma GCC diagnostic ignored "-Wmissing-declarations"
 #pragma GCC diagnostic ignored "-Wreturn-type"
 
-void ms_delay_int_count(volatile unsigned int nTime)
-{
-	nTime = (nTime * 14000);
-	for(; nTime > 0; nTime--);
-}
-
-
 int
 main(int argc, char* argv[])
 {
+  // Send a greeting to the trace device (skipped on Release).
+  trace_puts("Hello ARM World!");
 
-	while (1)
-	{
+  // At this stage the system clock should have already been configured
+  // at high speed.
+  trace_printf("System clock: %u Hz\n", SystemCoreClock);
 
-	}
+  timer_start();
+
+  blink_led_init();
+  
+  uint32_t seconds = 0;
+
+  // Infinite loop
+  while (1)
+    {
+      blink_led_on();
+      timer_sleep(seconds == 0 ? TIMER_FREQUENCY_HZ : BLINK_ON_TICKS);
+
+      blink_led_off();
+      timer_sleep(BLINK_OFF_TICKS);
+
+      ++seconds;
+      // Count seconds on the trace device.
+      trace_printf("Second %u\n", seconds);
+    }
+  // Infinite loop, never return.
 }
 
 #pragma GCC diagnostic pop
