@@ -31,9 +31,19 @@
 #include <stdlib.h>
 #include "diag/Trace.h"
 
+#include "Timer.h"
+#include "BlinkLed.h"
+
 // ----------------------------------------------------------------------------
 //
-// Standalone STM32F4 empty sample (trace via ITM).
+// Standalone STM32F4 led blink sample (trace via ITM).
+//
+// In debug configurations, demonstrate how to print a greeting message
+// on the trace device. In release configurations the message is
+// simply discarded.
+//
+// Then demonstrates how to blink a led with 1 Hz, using a
+// continuous loop and SysTick delays.
 //
 // Trace support is enabled by adding the TRACE macro definition.
 // By default the trace messages are forwarded to the ITM output,
@@ -41,6 +51,12 @@
 // changing the definitions required in system/src/diag/trace_impl.c
 // (currently OS_USE_TRACE_ITM, OS_USE_TRACE_SEMIHOSTING_DEBUG/_STDOUT).
 //
+
+// ----- Timing definitions -------------------------------------------------
+
+// Keep the LED on for 2/3 of a second.
+#define BLINK_ON_TICKS  (TIMER_FREQUENCY_HZ * 3 / 4)
+#define BLINK_OFF_TICKS (TIMER_FREQUENCY_HZ - BLINK_ON_TICKS)
 
 // ----- main() ---------------------------------------------------------------
 
@@ -51,59 +67,36 @@
 #pragma GCC diagnostic ignored "-Wmissing-declarations"
 #pragma GCC diagnostic ignored "-Wreturn-type"
 
-//#define RCC_AHB1ENR	 	(*(volatile unsigned long*)0x40023830)
-#define RCC_AHB1ENR	 	(*(volatile unsigned long*)0x40023830)
-#define GPIOC_MODER	 	(*(volatile unsigned long*)0x40020800)
-#define GPIOC_OTYPER 	(*(volatile unsigned long*)0x40020804)
-#define GPIOC_OSPEEDR 	(*(volatile unsigned long*)0x40020808)
-#define GPIOC_PUPDR 	(*(volatile unsigned long*)0x4002080C)
-#define GPIOC_ODR		(*(volatile unsigned long*)0x40020814)
-
-// 지연루틴	-> 다른방법으로 가능
-void ms_delay_int_count(volatile unsigned int nTime)
-{
-	nTime = (nTime * 14000);
-	for(; nTime > 0; nTime--);
-}
-
 int
 main(int argc, char* argv[])
 {
-	RCC_AHB1ENR  = 0x00000004;
-	GPIOC_MODER  = 0x55550055;
-	//GPIOC_MODER  = 0x00000000;
-	GPIOC_OTYPER = 0x00000000;
-	GPIOC_ODR	 = 0x00000000;
+  // Send a greeting to the trace device (skipped on Release).
+  trace_puts("Hello ARM World!");
 
-	// Infinite loop
-	while (1)
-	{
-	  /* GPIOC_ODR = 0x00000601;			//1
-	   ms_delay_int_count(1000);
-	   GPIOC_ODR = 0x00005B02;			//2
-	   ms_delay_int_count(1000);
-	   GPIOC_ODR = 0x00004F04;			//3
-	   ms_delay_int_count(1000);
-	   GPIOC_ODR = 0x00006608;			//4
-	   ms_delay_int_count(1000);
-	   GPIOC_ODR = 0x00006D01;			//5
-	   ms_delay_int_count(1000);
-	   GPIOC_ODR = 0x00007D02;			//6
-	   ms_delay_int_count(1000);
-	   GPIOC_ODR = 0x00002704;			//7
-	   ms_delay_int_count(1000);
-	   GPIOC_ODR = 0x00007F08;			//8
-	   ms_delay_int_count(1000);
-	   GPIOC_ODR = 0x00006F04;			//9
-	   ms_delay_int_count(1000);
-		*/
-	   for(int i = 0; i<4; i++)
-	   {
-		   GPIOC_ODR = 0x00000001 << i;
-		   ms_delay_int_count(1000);
-	   }
+  // At this stage the system clock should have already been configured
+  // at high speed.
+  trace_printf("System clock: %u Hz\n", SystemCoreClock);
 
-	}
+  timer_start();
+
+  blink_led_init();
+  
+  uint32_t seconds = 0;
+
+  // Infinite loop
+  while (1)
+    {
+      blink_led_on();
+      timer_sleep(seconds == 0 ? TIMER_FREQUENCY_HZ : BLINK_ON_TICKS);
+
+      blink_led_off();
+      timer_sleep(BLINK_OFF_TICKS);
+
+      ++seconds;
+      // Count seconds on the trace device.
+      trace_printf("Second %u\n", seconds);
+    }
+  // Infinite loop, never return.
 }
 
 #pragma GCC diagnostic pop
